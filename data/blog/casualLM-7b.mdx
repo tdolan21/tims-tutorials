@@ -1,0 +1,95 @@
+---
+title: 'CasualLM/7B: How to Build a Text Generation API'
+date: '2023-10-31'
+tags: ['Artificial Intelligence', 'Text-Generation', 'API', '7B']
+draft: false
+summary: 'A quick guide to building a text generation API with CasualLM/7B'
+---
+
+# How to Build a Text Generation API with CasualLM/7B
+
+From the words of the CasualLM team:
+
+```
+TL;DR: Perhaps this 7B model, better than all existing models <= 33B, in most quantitative evaluations...
+```
+
+CausalLM 7B - Fully Compatible with Meta LLaMA 2
+
+Use the transformers library that does not require remote/external code to load the model, AutoModelForCausalLM and AutoTokenizer (or manually specify LlamaForCausalLM to load LM, GPT2Tokenizer to load Tokenizer), and model quantization is fully compatible with GGUF (llama.cpp), GPTQ, and AWQ.
+
+You can read more from their model card [here](https://huggingface.co/CausalLM/7B).
+
+## Getting Started
+
+Let's roll up our sleeves and get started!
+
+### Setting the Stage with Libraries
+
+Before diving into the code, it's essential to import the required libraries. Here's what we'll be using:
+
+```python
+from fastapi import FastAPI, HTTPException
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from accelerate import Accelerator
+```
+
+With these libraries in place, we're ready to move on to the next step.
+
+### Load the model and tokenizer
+
+Next, you will need to load the model and tokenizer as follows:
+
+```python
+app = FastAPI()
+
+# Load model and tokenizer
+tokenizer = AutoTokenizer.from_pretrained("CausalLM/7B")
+model = AutoModelForCausalLM.from_pretrained("CausalLM/7B")
+
+```
+
+### Structuring our Input and Output
+
+The API we're building will require specific input data. To ensure that the incoming data is structured correctly, we'll define a model called TextGenerationInput. This model expects:
+
+    A prompt: The main text we want to expand upon.
+    A system_message: Some contextual message to guide the generated response.
+    max_new_tokens: The maximum number of tokens we want in our generated response (default is 100).
+
+Here's how we define this model:
+
+```python
+class TextGenerationInput(BaseModel):
+    prompt: str
+    system_message: str
+    max_new_tokens: int = 100
+```
+
+### Crafting the API Endpoint
+
+Now, the fun part! Let's define the API endpoint that'll be responsible for generating the text:
+
+```python
+@app.post("/casualLM/7b")
+def generate_text(input_data: TextGenerationInput):
+    """
+    Generate text given a prompt and system message using the CausalLM/7B model.
+    """
+    combined_prompt = f"{input_data.system_message} {input_data.prompt}"
+
+    try:
+        input_ids = tokenizer.encode(combined_prompt, return_tensors="pt")
+        out = model.generate(input_ids, max_length=input_data.max_length, num_return_sequences=1)
+        generated_text = tokenizer.decode(out[0], skip_special_tokens=True)
+        return {"generated_text": generated_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+## Conclusion
+
+Building a text generation API might seem daunting at first, but with the right tools and a step-by-step approach, it becomes a breeze. Leveraging powerful models like CasualLM/7B from the Hugging Face's transformers library, we've seen how simple it can be to craft an API that can generate creative and coherent text on the fly. Whether you're integrating this into a chatbot, content creation tool, or any other application, the possibilities are endless. As always, it's essential to continuously iterate and improve based on user feedback and new advancements in the field.
+So, embark on your NLP journey, keep exploring, and remember that the world of language models is vast and ever-evolving. Happy text generating! 🎉

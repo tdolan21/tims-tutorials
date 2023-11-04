@@ -1,0 +1,81 @@
+---
+title: 'CasualLM/14B: A Quick API Guide'
+date: '2023-10-31'
+tags: ['Artificial Intelligence', 'Text-Generation', 'API', '14B']
+draft: false
+summary: 'A quick guide to setting up an API using the CasualLM/14B model.'
+---
+
+# Upgrading to the Big Leagues with CasualLM/14B: A Quick API Guide
+
+## Introduction
+
+Hello again! If you recall our previous guide on setting up an API using the CasualLM/7B model, you might wonder, "What if I want more power?" Well, you're in luck.
+Today, we're scaling things up by diving into the CasualLM/14B model, which boasts a whopping 14 billion parameters! Let's explore how this differs from its 7B counterpart and why you might consider the upgrade.
+
+### Import the libraries
+
+The first thing you'll notice is that our library imports remain mostly unchanged:
+
+```python
+from fastapi import FastAPI, HTTPException
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+```
+
+### Load the model and tokenizer
+
+The consistency here ensures a smooth transition if you're considering moving from the 7B to the 14B model.
+
+The primary difference lies here. Instead of the CasualLM/7B model, we're now tapping into the mightier CasualLM/14B:
+
+```python
+app = FastAPI()
+
+# Load model and tokenizer
+tokenizer = AutoTokenizer.from_pretrained("CausalLM/14B")
+model = AutoModelForCausalLM.from_pretrained("CausalLM/14B")
+```
+
+With twice the parameters, you can expect enhanced text generation capabilities, albeit with increased computational requirements.
+
+### Define the input and output
+
+We will define a prompt model to make sure that the input is a string:
+
+```python
+class TextGenerationInput(BaseModel):
+    prompt: str
+    system_message: str
+    max_new_tokens: int = 100
+```
+
+This continuity ensures that migrating or scaling between the two models is a seamless affair.
+
+### Define the API endpoint
+
+Finally, we will define the API endpoint:
+
+```python
+@app.post("/casualLM/14b")
+def generate_text(input_data: TextGenerationInput):
+    """
+    Generate text given a prompt and system message using the CausalLM/14B model.
+    """
+    combined_prompt = f"{input_data.system_message} {input_data.prompt}"
+
+    try:
+        input_ids = tokenizer.encode(combined_prompt, return_tensors="pt")
+        out = model.generate(input_ids, max_length=input_data.max_length, num_return_sequences=1)
+        generated_text = tokenizer.decode(out[0], skip_special_tokens=True)
+        return {"generated_text": generated_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+## Conclusion
+
+Scaling up in the NLP world often involves harnessing the power of larger models, and the jump from CasualLM/7B to CasualLM/14B exemplifies this.
+While the core steps remain consistent, the enhanced capabilities of the 14B model can provide more refined text generation results. However, always weigh the benefits against the increased computational demands. Remember, bigger isn't always better—it's about finding the right fit for your needs. Whether you stick with 7B or venture into the realms of 14B, the world of NLP has a lot to offer.
+Keep exploring and happy coding! 🌟

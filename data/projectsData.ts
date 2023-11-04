@@ -1,20 +1,36 @@
 const projectsData = [
   {
-    title: 'A Search Engine',
-    description: `What if you could look up any information in the world? Webpages, images, videos
-    and more. Google has many features to help you find exactly what you're looking
-    for.`,
-    imgSrc: '/static/images/google.png',
-    href: 'https://www.google.com',
+    title: 'miniAGI',
+    description: `miniAGI is a Streamlit application that leverages the zero-shot ReAct Agent from Langchain with vectorsearch and many various integrations.`,
+    imgSrc: '/static/images/miniagi.png',
+    href: 'https://github.com/tdolan21/miniAGI',
   },
   {
-    title: 'The Time Machine',
-    description: `Imagine being able to travel back in time or to the future. Simple turn the knob
-    to the desired date and press "Go". No more worrying about lost keys or
-    forgotten headphones with this simple yet affordable solution.`,
-    imgSrc: '/static/images/time-machine.jpg',
-    href: '/blog/the-time-machine',
+    title: 'Zephyr-7b-α-API',
+    description: `This repo contains an api with postgreSQL database and a demo application for the zephyr-7b-alpha model from Huggingface.`,
+    imgSrc: '/static/images/zephyr.png',
+    href: 'https://github.com/tdolan21/zephyr-7b-alpha-api',
   },
+  {
+    title: 'SSD-1B-API',
+    description: `FastAPI implementation of the SSD-1B model from the Segmind AI team.`,
+    imgSrc: '/static/images/SSD_1B.png',
+    href: 'https://github.com/tdolan21/ssd-1b-ui/tree/main',
+  },
+  {
+    title: 'Detr-Resnet-50-API',
+    description: `This repo contains an api with postgreSQL database and a demo application for the zephyr-7b-alpha model from Huggingface.`,
+    imgSrc: '/static/images/detr-50-thumbnail.png',
+    href: 'https://github.com/tdolan21/detr-resnet-50-api',
+  },
+  {
+    title: 'Kosmos-2-Patch14-224 aPI',
+    description: `This repo contains an api with postgreSQL database and a demo application for the zephyr-7b-alpha model from Huggingface.`,
+    imgSrc: '/static/images/kosmos-2-thumbnail.png',
+    href: 'https://github.com/tdolan21/kosmos-2-demo',
+  },
+  
+
 ]
 
 export default projectsData

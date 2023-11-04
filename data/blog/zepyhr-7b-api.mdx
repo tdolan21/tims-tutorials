@@ -1,0 +1,415 @@
+---
+title: Comprehensive Zephyr-7b API tutorial
+date: '2023-10-28'
+tags: ['Artificial Intelligence', 'Python', 'API', 'HuggingFace']
+draft: false
+summary: Tutorial on how to use the Zephyr-7b-beta API and self host an API using FastAPI, Docker, and the diffusers library.
+---
+
+# Zephyr-7b API tutorial
+
+## Table of Contents
+
+- [Introduction](#introduction)
+- [Prerequisites](#prerequisites)
+- [Import the Required Libraries](#import-the-required-libraries)
+- [Setup the Pipeline and FastAPI Application](#setup-the-pipeline-and-fastapi-application)
+- [Add the CORS Middleware](#add-the-cors-middleware)
+- [Setup a Pydantic Model](#setup-a-pydantic-model)
+- [Response Endpoint](#response-endpoint)
+- [Testing](#testing)
+- [Adding a Frontend](#adding-a-frontend)
+  - [Set Page Config Information](#set-page-config-information)
+  - [Define the Main Structure](#define-the-main-structure)
+  - [Initialize the Response Data](#initialize-the-response-data)
+  - [Package the JSON Data and Send the Request](#package-the-json-data-and-send-the-request)
+  - [Display the Response](#display-the-response)
+- [Conclusion](#conclusion)
+- [Citations](#citations)
+
+## Introduction
+
+Zephyr is a series of language models that are trained to act as helpful assistants.
+Zephyr-7B-β is the second model in the series, and is a fine-tuned version of mistralai/Mistral-7B-v0.1
+that was trained on on a mix of publicly available, synthetic datasets using Direct Preference Optimization (DPO). We found that removing the in-built alignment of these datasets boosted performance on MT Bench and made the model more helpful.
+
+![zephyr](/static/images/zephyr_thumbnail.png)
+
+![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.68.0-green)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13.3-blue)
+![Docker](https://img.shields.io/badge/docker-latest-blue.svg)
+![Huggingface](https://img.shields.io/badge/Huggingface-Transformers-orange)
+
+More details can be found in the [model card](https://huggingface.co/HuggingFaceH4/zephyr-7b-beta) or the [technical report](https://arxiv.org/abs/2310.16944)
+
+The Github repository for this project can be found [here](https://github.com/tdolan21/zephyr-7b-alpha-api)
+
+## Prerequisites
+
+This tutorial will use conda for virtual environemnt. You can use whichever venv you would like.
+
+Make sure that you have these frameworks installed:
+
+- Transformers 4.35.0.dev0
+
+```bash
+pip install transformers --upgrade
+```
+
+- Pytorch 2.0.1+cu118
+
+```bash
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch-nightly -c nvidia
+```
+
+- Datasets 2.12.0
+
+```bash
+pip install datasets
+```
+
+Tokenizers 0.14.0
+
+```bash
+pip install tokenizers
+```
+
+The remainder of the requirements are:
+
+```bash
+pip install fastapi uvicorn streamlit
+```
+
+## Import the required libraries
+
+```python
+from fastapi import FastAPI, HTTPException, WebSocket, Request
+from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from typing import Optional, List
+import black
+import base64
+import asyncio
+import torch
+```
+
+## Setup the pipeline and FastAPI application
+
+Now, let's get into the actual setup of our application.
+
+```python
+app = FastAPI()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+```
+
+Here, you're initializing a FastAPI application and setting up the device for PyTorch, which will be either a GPU (cuda) or a CPU, based on availability.
+
+Following that, you'll establish the pipeline for text generation using the Zephyr model.
+
+```python
+pipe = pipeline(
+    "text-generation",
+    model="HuggingFaceH4/zephyr-7b-beta",
+    torch_dtype=torch.bfloat16,
+    device_map=device,
+)
+```
+
+This code sets up a text-generation pipeline with the specified Zephyr model. You can
+substitute zephyr-7b-beta with zephyr-7b-alpha if you prefer using the alpha version.
+
+## Add the CORS middleware
+
+To ensure your API can communicate with other services, especially if they are hosted on different origins, you'll want to set up CORS.
+
+```python
+# Add CORS middleware
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://localhost:8501",
+    # Add any other origins from which you want to allow requests
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+This code snippet specifies which origins are allowed to communicate with your API.
+As of now, it's set up for local development.
+
+## Setup a pydantic model
+
+To ensure data consistency and validation, you'll define a Pydantic model. This model will dictate the structure of incoming data.
+
+```python
+class QueryModel(BaseModel):
+    user_message: str
+    max_new_tokens: int = 256
+    do_sample: bool = True
+    temperature: float = 0.7
+    top_k: int = 50
+    top_p: float = 0.95
+    system_message: Optional[str] = "You are a friendly chatbot who always responds in the style of a python developer that uses a combination of natural language and markdown to answer questions."
+
+```
+
+This model defines the input format for the chatbot, allowing users to customize the system message and other parameters.
+
+## Response Endpoint
+
+With the necessary setup out of the way, you can now define the main interaction endpoint.
+
+```python
+## This endpoint allows the user to specify a custom system message
+@app.post("/zephyr/system-message", description="Get a response from the Zephyr chatbot with a custom system message. The default message is geared towards python code.")
+async def get_custom_response(query: QueryModel):
+    messages = [
+        {
+            "role": "system",
+            "content": query.system_message,
+        },
+        {"role": "user", "content": query.user_message},
+    ]
+
+    prompt = pipe.tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    outputs = pipe(
+        prompt,
+        max_new_tokens=query.max_new_tokens,
+        do_sample=query.do_sample,
+        temperature=query.temperature,
+        top_k=query.top_k,
+        top_p=query.top_p
+    )
+
+    # Split at the last occurrence of '</s>' and take everything after it
+    response = outputs[0]["generated_text"].split('</s>')[-1].strip()
+
+    # Remove all leading newline characters
+    while response.startswith("\n"):
+        response = response[1:]
+
+    if response.startswith("\n"):
+        response = response[len("\n"):].lstrip()
+        # Remove all leading newline characters
+    while response.startswith("\n"):
+        response = response[1:]
+
+    if response.startswith("<|assistant|>\n"):
+        response = response[len("<|assistant|>\n"):].lstrip()
+
+    return {"response": response}
+
+from fastapi import HTTPException
+```
+
+This endpoint uses the QueryModel to generate a chatbot response. It takes in a system and user message, processes them, and returns the model's response.
+
+## Testing
+
+With everything in place, it's time to test your application.
+
+Execute the following command in your terminal:
+
+```bash
+uvicorn filename:app --reload
+```
+
+This will start the FastAPI application. You can then access the interactive documentation and test the endpoints at:
+
+```bash
+http://lcoalhost:8000/docs
+```
+
+Technically, this API is now a complete implementation of self hosting this technology.
+
+However, we may want to continue the development of this application and add some more features.
+
+## Adding a frontend
+
+Import the required libraries
+
+```python
+import streamlit as st
+import requests
+import time
+import json
+import threading
+import websockets
+import asyncio
+```
+
+### Set page config information
+
+```python
+BASE_URL = "http://localhost:8000"
+
+# Set page title and tab icon
+st.set_page_config(
+    page_title="Zephyr-API Demo",
+    page_icon="🪂",  # You can specify a URL or an emoji as the tab icon
+)
+```
+
+You can change the information here to whatever you would like or change to a different emoji.
+
+### Define the main structure
+
+In this section, we're setting up the primary structure of our application's interface.
+Imagine you're walking into a control room.
+The first thing you'll see are the main controls and selection switches.
+
+```python
+st.title("zephyr-7B-α demo")
+
+endpoints = ["zephyr/system-message"]
+selected_endpoint = st.sidebar.selectbox("Choose Endpoint:", endpoints)
+
+## Endpoint specific configurations
+if selected_endpoint == "zephyr/system-message":
+    system_message = st.sidebar.text_input("System Message:", value="You are a friendly chatbot who always responds in the style of a python developer that uses a combination of natural language and python to answer questions.")
+
+```
+
+Here, when the "zephyr/system-message" channel is selected, we're presented with a textbox to type in a system message.
+This is akin to setting the theme or mood of our chatbot.
+
+Next, we will add the parameters in the sidebar to allow further configuration of the model.
+
+These are universal controls that impact the performance of our chatbot, no matter which channel we're on.
+
+- max_new_tokens: Think of this as setting the maximum length of a response. If you want shorter replies, slide it down. If you're okay with longer answers, push it up.
+- do_sample: This is like a toggle switch. When turned on, the chatbot gets a bit more creative with its responses.
+- temperature, top_k, and top_p: These are fine-tuning knobs. They control the randomness, diversity, and focus of the chatbot's answers. If you've ever played with the bass, treble, and balance knobs on a stereo, it's kind of like that.
+
+```python
+# Global model configurations (applies to all endpoints)
+max_new_tokens = st.sidebar.slider("Max New Tokens:", 50, 500, 256)
+do_sample = st.sidebar.checkbox("Do Sample:", value=True)
+temperature = st.sidebar.slider("Temperature:", 0.1, 1.0, 0.7, 0.1)
+top_k = st.sidebar.slider("Top K:", 1, 100, 50)
+top_p = st.sidebar.slider("Top P:", 0.1, 1.0, 0.95, 0.05)
+```
+
+### Initialize the session state
+
+Have you ever wished that machines had memory? With Streamlit's session state, they sort of do!
+
+```python
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display chat messages from history on app rerun
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+```
+
+Just like opening a chat window and seeing your previous messages, this section initializes the chat history so you can refer back to past interactions.
+
+### Initialize the response data
+
+In this section, we're preparing to converse with our chatbot:
+
+```python
+# Accept user input
+if prompt := st.chat_input("What is up?"):
+
+    # Construct the data dictionary based on the selected endpoint
+    if selected_endpoint == "zephyr/system-message" or selected_endpoint == "zephyr/structured-code-doc":
+        data = {
+            "user_message": prompt,
+            "max_new_tokens": max_new_tokens,
+            "do_sample": True,
+            "temperature": temperature,
+            "top_k": top_k,
+            "top_p": top_p,
+            "system_message": system_message  # Ensure system_message is defined
+        }
+```
+
+Behind the scenes, this is how your message is packaged with all the settings you've chosen before sending it off to the chatbot.
+
+### Package the JSON data and send the request
+
+Now, it's time to send our message:
+
+```python
+    # Convert the data payload into a compact JSON string
+    compact_json_payload = json.dumps(data)
+    url = f"{BASE_URL}/{selected_endpoint}"
+
+    # Send POST request to API
+    response = requests.post(url, data=compact_json_payload)
+    response_data = response.json()
+```
+
+### Display the response
+
+Finally, we get to hear back from our chatbot:
+
+```python
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    # Display assistant response in chat message container
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        full_response = ""
+        assistant_response = response_data["response"]
+        for chunk in assistant_response.split():
+            full_response += chunk + " "
+            time.sleep(0.05)
+            message_placeholder.markdown(full_response + "▌")
+        message_placeholder.markdown(full_response)
+
+    # Add assistant response to chat history
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+```
+
+Your message is displayed, just like in a chat window.
+
+The text appears gradually, giving the illusion of a real-time conversation.
+
+This is because of the simulated streaming in this chunk:
+
+```python
+for chunk in assistant_response.split():
+            full_response += chunk + " "
+            time.sleep(0.05)
+            message_placeholder.markdown(full_response + "▌")
+        message_placeholder.markdown(full_response)
+```
+
+### Conclusion
+
+With this setup, you can have a dynamic, flowing conversation with the chatbot, tweaking settings on the go and watching how it responds.
+Think of it as your personal chatroom where the chatbot is always eager to converse, and you're in control of its personality and style!
+
+If you enjoyed this tutorial, please consider giving it a star on Github and sharing it with your friends and colleagues.
+Also, if you would like more content using this model there is more available on github if you reach out I would be happy to create more complex guides.
+
+## Citations
+
+```
+@misc{tunstall2023zephyr,
+      title={Zephyr: Direct Distillation of LM Alignment},
+      author={Lewis Tunstall and Edward Beeching and Nathan Lambert and Nazneen Rajani and Kashif Rasul and Younes Belkada and Shengyi Huang and Leandro von Werra and Clémentine Fourrier and Nathan Habib and Nathan Sarrazin and Omar Sanseviero and Alexander M. Rush and Thomas Wolf},
+      year={2023},
+      eprint={2310.16944},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```

@@ -1,0 +1,279 @@
+---
+title: 'SSD-1B: A Powerful Model for Image Generation'
+date: '2023-10-31'
+tags: ['Artificial Intelligence', 'Image Generation', 'API', 'Database']
+draft: false
+summary: This tutorial contains a simple UI for the segmind/SSD-1B model with an API to support the application. The images are also stored in a database for future use.
+---
+
+# Introducing the SSD-1B Interface
+
+![SSD-1B Header Image](/static/images/SSD_1B.png)
+
+Here is the model description from the Segmind AI team:
+
+The Segmind Stable Diffusion Model (SSD-1B) is a distilled 50% smaller version of the Stable Diffusion XL (SDXL), offering a 60% speedup while maintaining high-quality text-to-image generation capabilities. It has been trained on diverse datasets, including Grit and Midjourney scrape data, to enhance its ability to create a wide range of visual content based on textual prompts.
+
+More information can be found [here](https://huggingface.co/segmind/SSD-1B).
+
+## What is the SSD-1B Model?
+
+The Segmind Stable Diffusion Model (SSD-1B) comes straight from the innovative minds at the Segmind AI team. It is a distilled version, 50% smaller than the Stable Diffusion XL (SDXL). But don't be fooled by its size! This model offers a whopping 60% speedup while still holding onto its exceptional text-to-image generation capabilities.
+
+Trained on diverse datasets like Grit and Midjourney scrape data, the SSD-1B's strength lies in its ability to craft a broad spectrum of visual content based purely on textual prompts. Interested in delving deeper? Discover more about it [here](https://huggingface.co/segmind/SSD-1B).
+
+## Technical Specifications
+
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.68.0-green) ![Streamlit](https://img.shields.io/badge/Streamlit-1.0.0-red) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-orange) ![Diffusers](https://img.shields.io/badge/Diffusers-dev-yellowgreen)
+
+## Prerequisites
+
+- PostgreSQL 14 or higher
+- Development version of Diffusers (Remember to include this during installation!)
+
+## Quick Install
+
+Want to dive in and try it out without the guide? Here's how:
+
+1. Clone the repository:
+
+```bash
+   git clone https://github.com/tdolan21/ssd-8b-ui
+   cd SSD-1B-UI
+   pip install -r requirements.txt
+   cd db-init
+   python init.py
+   cd ..
+```
+
+2. Install Dev Version of Diffusers
+
+```bash
+pip install git+https://github.com/huggingface/diffusers
+```
+
+3. Launch the Interface
+
+Linux:
+
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+Windows:
+
+```bash
+run.bat
+```
+
+## Complete Guide
+
+1. Create a file named api.py and then import all the required packages.
+
+2. Create a folder named generated_images.
+
+3. If you did not clone the repo, make sure that you have the requirements installed.
+
+```bash
+pip install transformers accelerate safetensors streamlit requests sqlalchemy psycopg2-binary uuid pydantic fastapi databases
+```
+
+```bash
+pip install git+https://github.com/huggingface/diffusers
+```
+
+```bash
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch-nightly -c nvidia
+```
+
+### Importing Packages
+
+```python
+from fastapi import FastAPI, Depends, HTTPException, Body
+from diffusers import StableDiffusionXLPipeline
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import List
+from PIL import Image
+import sqlalchemy
+import databases
+import base64
+import torch
+import time
+import uuid
+import io
+import os
+```
+
+These packages will allow us to create the API, connect to the database, and use the SSD-1B model.
+
+### Declare the fastapi application and create the SSD-1B pipeline.
+
+```python
+app = FastAPI()
+
+pipe = StableDiffusionXLPipeline.from_pretrained(
+    "segmind/SSD-1B",
+    torch_dtype=torch.float16,
+    use_safetensors=True,
+    variant="fp16"
+)
+
+pipe.to("cuda:0")
+
+Base = declarative_base()
+```
+
+This pipeline acts as a high level helper for the SSD-1B model. It allows us to easily generate images from text.
+
+Additionally, we move the pipeline to the device we want to run the model with. A GPU with at least 8GB of VRAM is required.
+
+## Create an image request model
+
+Next, we will create an ImageRequest model and an ImageRecord model. The ImageRequest model will be used to send the prompt and negative prompt to the API.
+
+The ImageRecord model will be used to store the image details in the database.
+
+```python
+# Image request model
+class ImageRequest(BaseModel):
+    prompt: str
+    negative_prompt: str
+
+# Image record model
+class ImageRecord(Base):
+    __tablename__ = "images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    prompt = Column(String, index=True)
+    negative_prompt = Column(String, index=True)
+    image_path = Column(String)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+```
+
+### Create the FastAPI Endpoint to query the SSD-1B model.
+
+```python
+# Generate an image, and store the details in the database
+@app.post("/generate-image/")
+async def generate_image(request: ImageRequest):
+    print("Received image generation request...")
+    try:
+        print("Generating image using the provided prompts...")
+        image = pipe(prompt=request.prompt, negative_prompt=request.negative_prompt).images[0]
+
+        # Generate a unique UUID and use it for the filename
+        unique_id = str(uuid.uuid4())
+        print(f"Generated UUID: {unique_id}")
+
+        print("Saving generated image locally...")
+        image_path = f"generated_images/{unique_id}.jpg"
+        image.save(image_path)
+
+        # Create an insert query
+        query = ImageRecord.__table__.insert().values(
+            prompt=record.prompt,
+            negative_prompt=record.negative_prompt,
+            image_path=record.image_path
+        )
+
+        print("Returning generated image...")
+        return FileResponse(image_path, media_type="image/jpg")
+
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+```
+
+## Create a Streamlit application to interact with the API
+
+Create a new file named app.py.
+
+Make sure you have the required packages installed and then import them to app.py
+
+### Import the required packages
+
+```python
+import streamlit as st
+import requests
+from io import BytesIO
+from PIL import Image
+
+API_ENDPOINT = "http://127.0.0.1:8000/generate-image/"
+```
+
+### Create the main page structure
+
+This will allow us to create a sidebar and some structure to the page.
+
+```python
+# Page info
+st.set_page_config(page_title="SSD-1B UI", page_icon=":infinity:")
+st.title(":infinity: SSD-1B API")
+st.info("Enter your prompt in the sidebar")
+```
+
+Next, we will add the input parameters to the sidebar.
+
+```python
+# Sidebar UI
+st.sidebar.image(header_image_path, use_column_width=True)
+st.sidebar.title("Parameters")
+prompt = st.sidebar.text_input("Prompt:", "An astronaut riding a green horse")
+neg_prompt = st.sidebar.text_input("Negative Prompt:", "ugly, blurry, poor quality")
+execute_button = st.sidebar.button("Execute")
+```
+
+Finally, we will include the execution logic.
+
+```python
+# Main UI
+if execute_button:
+    with st.spinner("Generating image..."):
+        # Make a POST request to the API
+        response = requests.post(API_ENDPOINT, json={"prompt": prompt, "negative_prompt": neg_prompt})
+
+        # Check for a valid response
+        if response.status_code == 200:
+            # Convert the response content to a PIL Image
+            image_bytes = BytesIO(response.content)
+            image_obj = Image.open(image_bytes)
+
+            # Display the image in Streamlit
+            st.image(image_obj, caption="Generated Image", use_column_width=True)
+
+        else:
+            st.error(f"Failed to generate image. API responded with: {response.text}")
+```
+
+### Run both of the files together
+
+Create a final file named run.sh and add the following code:
+
+```bash
+#!/bin/bash
+
+# Execute the streamlit command
+streamlit run app.py &
+
+# Execute the uvicorn command
+uvicorn api:app --reload
+```
+
+Make sure to make the file executable:
+
+```bash
+chmod +x run.sh
+```
+
+Then, you can run the file:
+
+```bash
+./run.sh
+```
+
+## Conclusion
+
+This is the baseline application. It should be running and available for inference.
