@@ -6,10 +6,10 @@ const siteMetadata = {
   description: 'Code tutorials for Artificial Intelligence, Machine Learning, and Data Science',
   language: 'en-us',
   theme: 'system', // system, dark or light
-  siteUrl: 'https://tailwind-nextjs-starter-blog.vercel.app',
+  siteUrl: 'https://tims-tutorials.vercel.app',
   siteRepo: 'https://github.com/timlrx/tailwind-nextjs-starter-blog',
   siteLogo: '/static/images/logo.svg',
-  socialBanner: '/static/images/timsTutorials.png',
+  socialBanner: 'public/static/images/timsTutorials.png',
   mastodon: 'https://mastodon.social/@mastodonuser',
   email: 'tdolandevelopment@gmail.com',
   github: 'https://github.com/tdolan21',
