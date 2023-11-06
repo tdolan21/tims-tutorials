@@ -1,0 +1,235 @@
+---
+title: 'Owlv2-base-patch16-ensemble: Is it better than Microsoft's Kosmos-2-Patch14-224?'
+date: '2023-11-06'
+lastmod: '2023-11-06'
+tags: ['Google', 'Artificial Intelligence', 'Object Detection' 'Visual Question Answering (VQA)']
+draft: false
+summary: 'Owlv2-base-patch16-ensemble: Powerful multi-modal object detection from Google. This post contains an application build and a comparison between this Microsoft's comparable model.'
+images: ['/static/images/owlv2_thumbnail.png', '/static/images/owlv2_1.jpg', '/static/images/owlv2_2.jpg'', '/static/images/kosmos-2_1.jpg']
+authors: ['default']
+layout: PostLayout
+canonicalUrl: https://tims-tutorials.vercel.app/blog/owlv2-base-patch16-ensemble
+---
+
+# Owlv2-base-patch16-ensemble: Powerful multi-modal object detection
+
+![Owlv2-base-patch16-ensemble: Powerful multi-modal object detection](/static/images/owlv2_thumbnail.png)
+
+My post for Microsoft's Kosmos-2 is available [here](https://tims-tutorials.vercel.app/blog/kosmos-2-patch14-224)
+
+The repository with the code for this post is available [here](https://github.com/tdolan21/owlv2-base-patch16-api)
+
+## Introduction
+
+The following is an excerpt from Google's model card:
+
+```
+The OWLv2 model (short for Open-World Localization) was proposed in Scaling Open-Vocabulary Object Detection by Matthias Minderer, Alexey Gritsenko, Neil Houlsby. OWLv2, like OWL-ViT, is a zero-shot text-conditioned object detection model that can be used to query an image with one or multiple text queries. 
+```
+
+## How does this compare to Microsoft's Kosmos-2-Patch14-224?
+
+The next phase of object detection integrates aspects of language modeling. Both of these models accept prompts in various formats, which 'unlocks' some more features in the model.
+
+### Owlv2-base-patch16-ensemble
+
+Google's model is more designed to receive a library of images and an array of prompts to detect objects in batch style.
+This affords them the luxury of versatility, whereas Microsoft's model is more designed for precision and understanding a single image.
+
+This is primarily shown in how you send the prompts:
+
+```python
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+texts = [["a photo of a cat", "a photo of a dog"]]
+inputs = processor(text=texts, images=image, return_tensors="pt")
+outputs = model(**inputs)
+```
+Then the output is printed with this format: 
+
+```python
+# Print detected objects and rescaled box coordinates
+for box, score, label in zip(boxes, scores, labels):
+    box = [round(i, 2) for i in box.tolist()]
+    print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
+```
+This may seem like a simple strategy at first, but its actually quite powerful because it can be used both ways.
+
+It can accept a single image with many prompts to detect multiple things in one image, or it can accept a library of images with a single prompt to detect a single thing in many images.
+
+It could also accept a library of images and a library of descriptions to detect many things in many images.
+
+#### But how is that different than what Microsoft's model can do?
+
+### Kosmos-2-Patch14-224
+
+The full post for this model is available in the header of this post.
+
+Microsoft's model accepts a more complex prompt centered around a grounding phase and an object.
+
+### Multi-modal Reffering 
+
+#### Referring Expression Comprehension
+
+In this task, we comprehend a referring expression:
+
+```python
+prompt = "<grounding><phrase> a snowman next to a fire</phrase>"
+run_example(prompt)
+```
+#### Output
+
+```python
+a snowman next to a fire
+[('a snowman next to a fire', (0, 24), [(0.390625, 0.046875, 0.984375, 0.828125)])]
+
+<grounding><phrase> a snowman next to a fire</phrase><object><patch_index_0044><patch_index_0863></object>
+
+```
+#### Perception-Language Tasks
+
+### Grounded Visual Question Answering (VQA)
+
+Here we answer a question based on visual and textual cues:
+
+```python
+prompt = "<grounding> Question: What is special about this image? Answer:"
+run_example(prompt)
+```
+Answer with details:
+
+```python
+Question: What is special about this image? Answer: The image features a snowman sitting by a campfire in the snow.
+[('a snowman', (71, 80), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a campfire', (92, 102), [(0.109375, 0.640625, 0.546875, 0.984375)])]
+
+<grounding> Question: What is special about this image? Answer: The image features<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> sitting by<phrase> a campfire</phrase><object><patch_index_0643><patch_index_1009></object> in the snow.
+```
+#### Detailed Captioning
+
+```python
+prompt = "<grounding> Describe this image in detail:"
+run_example(prompt)
+# An image of a snowman warming himself by a campfire.
+# [('a snowman', (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a campfire', (41, 51), [(0.109375, 0.640625, 0.546875, 0.984375)])]
+
+# <grounding> An im
+```
+
+## Testing the model
+
+### Owlv2-base-patch16-ensemble
+
+Prompt: "a photo of a snowman"
+
+![Owlv2-base-patch16-ensemble](/static/images/owlv2_1.jpg)
+
+Prompt: a photo of a snowman, a photo of a fire
+
+![Owlv2-base-patch16-ensemble](/static/images/owlv2_2.jpg)
+
+The results show here that Google's model falls short when trying to achieve higher detail in one image.
+
+### Kosmos-2-Patch14-224
+
+With Kosmos-2, you can get a much more detailed result with a single prompt.
+
+This prompt:
+
+```
+<grounding><phrase> a snowman</phrase>
+```
+Yields this result:
+
+![Kosmos-2-Patch14-224](/static/images/kosmos-2_1.jpg)
+
+However, utilizing the VQA capabilities of kosmos-2 will also yield a an unprompted description.
+
+```
+Description: a snowman is warming himself by the fire
+```
+As well as a detailed JSON response:
+
+```JSON
+[
+  [
+    "a snowman",
+    [
+      0,
+      9
+    ],
+    [
+      [
+        0.390625,
+        0.046875,
+        0.984375,
+        0.828125
+      ]
+    ]
+  ],
+  [
+    "the fire",
+    [
+      32,
+      40
+    ],
+    [
+      [
+        0.203125,
+        0.015625,
+        0.484375,
+        0.859375
+      ]
+    ]
+  ]
+]
+```
+
+So, Kosmos-2 will do both steps of the object detection process for you. It will look for the objects provided by the prompt as well as answer a question or provide more information to further assist you.
+
+## Comparative Analysis
+
+Both Google's Owlv2-base-patch16-ensemble and Microsoft's Kosmos-2-Patch14-224 models exhibit significant strengths in the realm of object detection.
+
+A distinctive feature of Microsoft's Kosmos-2 is its dual capability in visual question answering along with object detection, which may extend its utility in various scenarios. This feature could be a decisive factor for users requiring a robust multi-functional tool.
+
+Conversely, Google's model has been designed with the capacity to process a high volume of image data and multiple prompts, although this comes with the necessity for users to manually adjust image scaling for accurate object detection. This could be seen as an additional step in the process but also allows for a level of detail and customization in the output.
+
+Furthermore, Google's model appears to adopt a conservative approach in terms of confidence levels, displaying a lower confidence score even in cases where the object is quite evident. This may suggest a more cautious algorithm that possibly prioritizes precision.
+
+When choosing between the two, it's important to consider the specific needs of the application, such as the requirement for high-volume image processing or the need for integrated visual question answering capabilities. Each model's nuances and operational requirements should align with the end goal of the user's project.
+## Citations
+
+```bibtex
+@misc{minderer2023scaling,
+      title={Scaling Open-Vocabulary Object Detection}, 
+      author={Matthias Minderer and Alexey Gritsenko and Neil Houlsby},
+      year={2023},
+      eprint={2306.09683},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+@article{kosmos-2,
+  title={Kosmos-2: Grounding Multimodal Large Language Models to the World},
+  author={Zhiliang Peng and Wenhui Wang and Li Dong and Yaru Hao and Shaohan Huang and Shuming Ma and Furu Wei},
+  journal={ArXiv},
+  year={2023},
+  volume={abs/2306}
+}
+
+@article{kosmos-1,
+  title={Language Is Not All You Need: Aligning Perception with Language Models},
+  author={Shaohan Huang and Li Dong and Wenhui Wang and Yaru Hao and Saksham Singhal and Shuming Ma and Tengchao Lv and Lei Cui and Owais Khan Mohammed and Qiang Liu and Kriti Aggarwal and Zewen Chi and Johan Bjorck and Vishrav Chaudhary and Subhojit Som and Xia Song and Furu Wei},
+  journal={ArXiv},
+  year={2023},
+  volume={abs/2302.14045}
+}
+
+@article{metalm,
+  title={Language Models are General-Purpose Interfaces},
+  author={Yaru Hao and Haoyu Song and Li Dong and Shaohan Huang and Zewen Chi and Wenhui Wang and Shuming Ma and Furu Wei},
+  journal={ArXiv},
+  year={2022},
+  volume={abs/2206.06336}
+}
+
+```
