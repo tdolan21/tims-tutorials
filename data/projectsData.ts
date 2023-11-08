@@ -18,6 +18,12 @@ const projectsData = [
     href: 'https://github.com/tdolan21/ssd-1b-ui/tree/main',
   },
   {
+    title: 'OpenAI-Whisper-v3 Fullstack Application',
+    description: `This repo contains an api with postgreSQL database and a demo application for the zephyr-7b-alpha model from Huggingface.`,
+    imgSrc: '/static/images/whisper-v3-thumbnail.png',
+    href: 'https://github.com/tdolan21/openai-whisper-v3-api',
+  },
+  {
     title: 'Detr-Resnet-50-API',
     description: `This repo contains an api with postgreSQL database and a demo application for the zephyr-7b-alpha model from Huggingface.`,
     imgSrc: '/static/images/detr-50-thumbnail.png',
@@ -28,12 +34,6 @@ const projectsData = [
     description: `This repo contains an api with postgreSQL database and a demo application for the zephyr-7b-alpha model from Huggingface.`,
     imgSrc: '/static/images/kosmos-2-thumbnail.png',
     href: 'https://github.com/tdolan21/kosmos-2-demo',
-  },
-  {
-    title: 'OpenAI-Whisper-v3 Fullstack Application',
-    description: `This repo contains an api with postgreSQL database and a demo application for the zephyr-7b-alpha model from Huggingface.`,
-    imgSrc: '/static/images/whisper-v3-thumbnail.png',
-    href: 'https://github.com/tdolan21/openai-whisper-v3-api',
   },
   
 
