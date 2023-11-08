@@ -23,7 +23,8 @@ export default function Footer() {
         </div>
         <div className="mb-8 text-sm text-gray-500 dark:text-gray-400">
           <Link href="https://github.com/tdolan21?tab=repositories">
-                Code tutorials for Artificial Intelligence          </Link>
+        Code tutorials for Artificial Intelligence       
+          </Link>
         </div>
       </div>
     </footer>
