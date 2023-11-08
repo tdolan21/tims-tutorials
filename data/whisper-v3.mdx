@@ -1,0 +1,532 @@
+---
+title: 'Building an Audio Transcription App with OpenAI Whisper-large-v3'
+date: '2023-11-08'
+lastmod: '2023-11-08'
+tags: ['OpenAI', 'Whisper', 'Speech Recognition', 'Artificial Intelligence', 'GPU Acceleration']
+draft: false
+summary: 'This post provides a comprehensive guide on using OpenAI Whisper-large-v3 for speech recognition. Learn to build an audio transcription app, integrate a front-end with Streamlit, and add a YouTube-to-MP3 feature.'
+images: ['/static/images/whisper-v3-thumbnail.jpg']
+authors: ['default']
+layout: PostLayout
+---
+
+# OpenAI Whisper-v3 Complete Guide
+
+OpenAI's Whisper-large-v3 represents a leap forward in automatic speech recognition. 
+With this model, OpenAI has achieved new benchmarks in understanding and transcribing human speech, making it an invaluable tool for developers and businesses alike.
+This complete guide will walk you through installation, setup, and execution, providing you with the knowledge to leverage this powerful model effectively.
+
+![Whisper-v3](/static/images/whisper-v3-thumbnail.jpg)
+
+## Introduction
+
+### Table of Contents
+
+1. [Introduction](#introduction)
+   - [Preparing Your Environment](#preparing-your-environment)
+   - [Setting up Conda Environment](#setting-up-conda-environment)
+   - [Resources](#resources)
+   - [Installation](#installation)
+2. [Test Code](#test-code)
+   - [Short-Form Transcription](#short-form-transcription)
+   - [Long-Form Transcription](#long-form-transcription)
+   - [Speculative Decoding](#speculative-decoding)
+3. [Building an Interface for Audio Transcription](#building-an-interface-for-audio-transcription)
+   - [Import the Requirements](#import-the-requirements)
+   - [Load the Model](#load-the-model)
+   - [Convert Sample Rate](#convert-sample-rate)
+   - [Transcribe Audio](#transcribe-audio)
+4. [Adding a Frontend with Streamlit](#adding-a-frontend-with-streamlit)
+   - [Setup Streamlit Interface](#setup-streamlit-interface)
+5. [Adding a Youtube-to-MP3 Feature](#adding-a-youtube-to-mp3-feature)
+   - [Youtube to MP3 API](#youtube-to-mp3-api)
+   - [Streamlit for Youtube Conversion](#streamlit-for-youtube-conversion)
+6. [Running the App](#running-the-app)
+7. [Conclusion](#conclusion)
+8. [References](#references)
+
+The end goal of this tutorial is for you to understand automatic speech recognition and how to use the OpenAI Whisper-large-v3 model to transcribe audio files. We will cover the following topics:
+
+### Resources
+
+[GitHub](https://github.com/tdolan21/openai-whisper-v3-api)
+[Whisper-v3-Model-Card](https://huggingface.co/openai/whisper-large-v3)
+
+First, make sure that your preffered torch environment is configured.
+
+## Preparing Your Environment
+
+**If you have already done these steps or are familiar with the process, you can skip this section.**
+
+The first step is to ensure that you have the appropriate NVIDIA GPU drivers installed on your local machine.
+
+Before we can leverage the GPU acceleration for the Whisper-large-v3 model, we need to ensure that we have the right tools installed. Conda is an open-source package management system and environment management system that runs on Windows, macOS, and Linux. It allows you to install, run, and update packages and their dependencies.
+Installing Conda
+
+If you don't already have Conda installed, you'll need to install it before proceeding. You can download and install Conda from the [official Conda website](https://docs.conda.io/projects/miniconda/en/latest/miniconda-install.html). Choose the installer that's right for your system and follow the on-screen instructions.
+
+Once you have Conda installed, open a terminal window and proceed with setting up your environment.
+
+### Setting up Conda Environment
+
+Creating a dedicated Conda environment for your project is considered a best practice as it helps manage dependencies and avoid conflicts.
+
+```bash
+conda create --name torch python=3.10
+conda activate torch
+```
+
+You should make sure that you have followed the correct steps located [here](https://pytorch.org/get-started/locally/) to install torch with GPU support
+for your correct platform. If you have not done this, you will not be able to use the GPU.
+
+I am on linux for example, so this would be my install command using conda.
+
+```bash
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch-nightly -c nvidia
+```
+Build the correct command for your machine on the website and make sure its installed properly by testing if torch has access to the gpu.
+
+You do not need to locally install CUDA or cudnn, pytorch ships with prebuilt binaries for each version. These steps alone are enough for torch to see your GPU.
+
+## Installation
+
+Then, you can install the requirements with:
+
+```bash
+pip install -r requirements.txt
+```
+
+or 
+
+```bash
+pip install transformers datasets fastapi uvicorn pillow soundfile librosa pydub yt-dlp flash_attn
+```
+
+Before diving into the technical details, let's ensure you have everything you need to run Whisper-large-v3. Each package in the installation plays a pivotal role:
+
++ transformers: Provides access to the model and tokenizers.
++ datasets: Facilitates loading and managing large datasets.
++ fastapi and uvicorn: Offer an easy way to deploy models as web APIs.
++ pillow: Aids in image processing, which can be useful for visualizing spectrograms.
++ soundfile and librosa: Handle audio file operations and transformations.
++ pydub: Handles audio file operations and transformations.
++ yt-dlp: Handles audio file acquisition from youtube.
+
+## Test Code
+
+```python
+import torch
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from datasets import load_dataset
+
+
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+model_id = "openai/whisper-large-v3"
+
+model = AutoModelForSpeechSeq2Seq.from_pretrained(
+    model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+)
+model.to(device)
+
+processor = AutoProcessor.from_pretrained(model_id)
+
+pipe = pipeline(
+    "automatic-speech-recognition",
+    model=model,
+    tokenizer=processor.tokenizer,
+    feature_extractor=processor.feature_extractor,
+    max_new_tokens=128,
+    torch_dtype=torch_dtype,
+    device=device,
+)
+
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+sample = dataset[0]["audio"]
+
+result = pipe(sample)
+print(result["text"])
+```
+
+### Long-Form Transcription
+
+```python
+
+import torch
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from datasets import load_dataset
+
+
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+model_id = "openai/whisper-large-v3"
+
+model = AutoModelForSpeechSeq2Seq.from_pretrained(
+    model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+)
+model.to(device)
+
+processor = AutoProcessor.from_pretrained(model_id)
+
+pipe = pipeline(
+    "automatic-speech-recognition",
+    model=model,
+    tokenizer=processor.tokenizer,
+    feature_extractor=processor.feature_extractor,
+    max_new_tokens=128,
+    chunk_length_s=15,
+    batch_size=16,
+    torch_dtype=torch_dtype,
+    device=device,
+)
+
+dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+sample = dataset[0]["audio"]
+
+result = pipe(sample)
+print(result["text"])
+
+```
+
+### Speculative decoding
+
+From OpenAI:
+
+"Whisper tiny can be used as an assistant model to Whisper for speculative decoding. Speculative decoding mathematically ensures the exact same outputs as Whisper are obtained while being 2 times faster. This makes it the perfect drop-in replacement for existing Whisper pipelines, since the same outputs are guaranteed."
+
+
+```python
+from transformers import pipeline, AutoModelForCausalLM, AutoModelForSpeechSeq2Seq, AutoProcessor
+import torch
+from datasets import load_dataset
+
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+assistant_model_id = "openai/whisper-tiny"
+
+assistant_model = AutoModelForCausalLM.from_pretrained(
+    assistant_model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+)
+assistant_model.to(device)
+
+model_id = "openai/whisper-large-v3"
+
+model = AutoModelForSpeechSeq2Seq.from_pretrained(
+    model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+)
+model.to(device)
+
+processor = AutoProcessor.from_pretrained(model_id)
+
+pipe = pipeline(
+    "automatic-speech-recognition",
+    model=model,
+    tokenizer=processor.tokenizer,
+    feature_extractor=processor.feature_extractor,
+    max_new_tokens=128,
+    generate_kwargs={"assistant_model": assistant_model},
+    torch_dtype=torch_dtype,
+    device=device,
+)
+
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+sample = dataset[0]["audio"]
+
+result = pipe(sample)
+print(result["text"])
+
+```
+
+## Building an interface for audio transcription
+
+### Import the requirements
+
+To begin, import the necessary libraries. FastAPI creates the web server, torch is used for machine learning operations, and transformers provides access to pre-trained models and pipelines. The pydub library is used for handling audio files, and io is used for handling byte streams.
+
+```python  
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse, FileResponse
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from pydub import AudioSegment
+from typing import List
+import yt_dlp
+import torch
+import io
+import os
+
+```
+### Load the model
+
+Initialize the FastAPI app and set up the Whisper model and processing pipeline. The model is loaded and moved to the GPU if available, optimizing for lower memory usage on the CPU when necessary. The processor handles the tokenization and feature extraction needed for the model.
+
+```python
+app = FastAPI()
+
+# Initialize the model and processor upon app startup
+pipe = setup_model()
+
+# Setup the Whisper model and pipeline
+def setup_model():
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+    model_id = "openai/whisper-large-v3"
+    model = AutoModelForSpeechSeq2Seq.from_pretrained(
+        model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+    )
+    model.to(device)
+    processor = AutoProcessor.from_pretrained(model_id)
+    pipe = pipeline(
+        "automatic-speech-recognition",
+        model=model,
+        tokenizer=processor.tokenizer,
+        feature_extractor=processor.feature_extractor,
+        max_new_tokens=128,
+        chunk_length_s=15,
+        batch_size=16,
+        torch_dtype=torch_dtype,
+        device=device,
+    )
+    return pipe
+```
+### Convert Sample Rate
+
+For optimal performance, the Whisper model expects audio input at a sample rate of 16000 Hz. The function `convert_sample_rate` ensures that any audio file uploaded is converted to this rate if necessary. This step is crucial for maintaining the accuracy of the model's transcription. The `pydub` library is used here to manage the audio data and perform the conversion seamlessly.
+
+```python
+from pydub import AudioSegment
+import io
+
+# Convert the sample rate to 16000 Hz if needed
+def convert_sample_rate(audio_bytes):
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+    if audio.frame_rate != 16000:
+        audio = audio.set_frame_rate(16000)
+    return audio
+
+```
+### Transcribe audio
+
+The final piece of the setup is the transcription endpoint. This endpoint is designed to handle HTTP POST requests containing audio files. The audio is processed in memory, its sample rate is converted if needed, and then it's passed to the Whisper model for transcription. The model's output, the transcribed text, is then returned to the client in a JSON format. Robust error handling ensures that any issues during transcription are communicated clearly to the client.
+
+```python
+# Endpoint to handle audio file uploads and transcription
+@app.post("/transcribe/")
+async def transcribe_audio_file(file: UploadFile = File(...)):
+    try:
+        audio_bytes = await file.read()
+        transcription = transcribe_audio(pipe, audio_bytes)
+        return JSONResponse(content={"transcription": transcription}, status_code=200)
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+```
+
+## Adding a frontend with streamlit
+
+### Import the requirements
+
+To begin, import the necessary libraries. Streamlit is used to create the frontend, and requests is used to make HTTP requests to the backend. The io library is used for handling byte streams.
+
+```python
+import streamlit as st
+import requests
+```
+Finally, we have the small streamlit interface:
+
+```python
+st.title("Audio Transcription App")
+st.write("Upload an audio file and it will be transcribed using the Whisper model through the FastAPI endpoint.")
+
+# File uploader
+audio_file = st.sidebar.file_uploader("Upload your audio file", type=['wav', 'mp3', 'ogg'])
+
+if audio_file is not None:
+    # Inform the user that the transcription is in process
+    with st.spinner('Transcribing...'):
+        # Prepare the file to send to the FastAPI endpoint
+        files = {"file": (audio_file.name, audio_file, "audio/mpeg")}
+        # POST the file to the FastAPI endpoint
+        response = requests.post("http://localhost:8000/transcribe/", files=files)
+
+        if response.status_code == 200:
+            # Display the transcription
+            transcription = response.json()["transcription"]
+            st.text("Transcription:")
+            st.write(transcription)
+        else:
+            # Handle errors
+            st.error("An error occurred during the transcription process")
+            st.write(response.json()["error"])
+```
+
+## Adding a Youtube-to-mp3 feature
+
+If you would like to include the Youtube-to-mp3 features that are in the full application, you just need to add this to you api.py file:
+    
+```python
+######################################
+#### Youtube to MP3 Converter API ####
+######################################
+
+# Function to download YouTube video and convert it to MP3
+def youtube_video_to_mp3(youtube_url: str) -> str:
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'prefer_ffmpeg': True,
+        'keepvideo': False,
+        'quiet': True,
+        'no_warnings': True,
+        'outtmpl': f'{download_dir}/%(title)s.%(ext)s',
+    }
+    
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(youtube_url, download=False)
+        video_title = info_dict.get('title', 'YouTubeAudio')
+        ydl.download([youtube_url])
+
+    # The expected filename of the audio file
+    audio_filename = f'{download_dir}/{video_title}.mp3'
+    
+    return audio_filename
+
+# Helper function to clean up the file after sending the response
+def clean_up_file(file_path: str):
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception as e:
+        print(f"Error deleting file: {e}")
+
+# Define the endpoint for YouTube to MP3 conversion
+@app.post("/youtube_to_mp3/")
+async def youtube_to_mp3(url: str, background_tasks: BackgroundTasks):
+    try:
+        audio_filename = youtube_video_to_mp3(url)
+
+        # Create a FileResponse that prompts download on the client's side
+        response = FileResponse(path=audio_filename, media_type='audio/mpeg', filename=os.path.basename(audio_filename))
+
+        # Schedule the file to be deleted after the download
+        background_tasks.add_task(clean_up_file, file_path=audio_filename)
+        return response
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+and you will need to add this to your 'app.py' file:
+
+```python
+st.sidebar.divider()
+
+# Text input in the sidebar for YouTube URL
+youtube_url = st.sidebar.text_input("Or enter a YouTube URL here:")
+
+
+# Button to trigger YouTube to MP3 conversion
+if st.sidebar.button('Create MP3 from YouTube'):
+    if youtube_url:
+        with st.spinner('Downloading and converting YouTube video to MP3...'):
+            response = requests.post("http://localhost:8000/youtube_to_mp3/", params={"url": youtube_url})
+            if response.status_code == 200:
+                st.success('YouTube video has been converted to MP3!')
+            else:
+                st.error("An error occurred during the conversion process")
+                st.write(response.text)
+    else:
+        st.error("Please enter a valid YouTube URL.")
+st.sidebar.divider()
+```
+
+Your completed app.py should look like this:
+
+```python
+import streamlit as st
+import requests
+import os
+
+audio_file = st.sidebar.file_uploader("Upload your audio file", type=['wav', 'mp3', 'ogg'])
+st.sidebar.divider()
+
+# Text input in the sidebar for YouTube URL
+youtube_url = st.sidebar.text_input("Or enter a YouTube URL here:")
+
+
+# Button to trigger YouTube to MP3 conversion
+if st.sidebar.button('Create MP3 from YouTube'):
+    if youtube_url:
+        with st.spinner('Downloading and converting YouTube video to MP3...'):
+            response = requests.post("http://localhost:8000/youtube_to_mp3/", params={"url": youtube_url})
+            if response.status_code == 200:
+                st.success('YouTube video has been converted to MP3!')
+            else:
+                st.error("An error occurred during the conversion process")
+                st.write(response.text)
+    else:
+        st.error("Please enter a valid YouTube URL.")
+st.sidebar.divider()
+if audio_file is not None:
+    # Inform the user that the transcription is in process
+    with st.spinner('Transcribing...'):
+        # Prepare the file to send to the FastAPI endpoint
+        files = {"file": (audio_file.name, audio_file, "audio/mpeg")}
+        # POST the file to the FastAPI endpoint
+        response = requests.post("http://localhost:8000/transcribe/", files=files)
+
+        if response.status_code == 200:
+            # Display the transcription
+            transcription = response.json()["transcription"]
+            st.text("Transcription:")
+            st.write(transcription)
+        else:
+            # Handle errors
+            st.error("An error occurred during the transcription process")
+            st.write(response.json()["error"])
+```
+## Running the app
+
+To run the app, you will need to make another file named run.sh and add the following code:
+
+```bash
+#!/bin/bash
+
+# Execute the streamlit command
+streamlit run app.py &
+
+# Execute the uvicorn command
+uvicorn api:app --reload
+```
+
+This will trigger both servers to start up. To run the app, simply run the following command:
+
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+# Conclusion 
+
+With these components, the FastAPI server provides a robust and efficient way to transcribe audio files. The integration of OpenAI's Whisper model ensures high-quality transcriptions, making the service suitable for a variety of audio processing tasks.
+
+Now you are ready to build your own audio transcription app using the Whisper model and FastAPI. You can find the full code for this tutorial on GitHub.
+
+## References
+
+```bibtex
+@misc{radford2022whisper,
+  doi = {10.48550/ARXIV.2212.04356},
+  url = {https://arxiv.org/abs/2212.04356},
+  author = {Radford, Alec and Kim, Jong Wook and Xu, Tao and Brockman, Greg and McLeavey, Christine and Sutskever, Ilya},
+  title = {Robust Speech Recognition via Large-Scale Weak Supervision},
+  publisher = {arXiv},
+  year = {2022},
+  copyright = {arXiv.org perpetual, non-exclusive license}
+}
+```
